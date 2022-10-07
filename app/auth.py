@@ -26,15 +26,15 @@ def activate():
             
             db = get_db()
             attempt = db.execute(
-                QUERY, (number, utils.U_UNCONFIRMED)
+                'SELECT * FROM activationlink where challenge=? and state=? and CURRENT_TIMESTAMP BETWEEN created AND validuntil', (number, utils.U_UNCONFIRMED)
             ).fetchone()
 
             if attempt is not None:
                 db.execute(
-                    QUERY, (utils.U_CONFIRMED, attempt['id'])
+                    'UPDATE activationlink SET state = ? WHERE id = ?', (utils.U_CONFIRMED, attempt['id'])
                 )
                 db.execute(
-                    QUERY, (attempt['username'], attempt['password'], attempt['salt'], attempt['email'])
+                    'INSERT INTO user (username, password,salt,email) VALUES (?,?,?,?)', (attempt['username'], attempt['password'], attempt['salt'], attempt['email'])
                 )
                 db.commit()
 
@@ -98,13 +98,13 @@ def register():
             number = hex(random.getrandbits(512))[2:]
 
             db.execute(
-                QUERY,
+                'INSERT INTO activationlink (challenge, state, username, password,salt,email) VALUES (?,?,?,?,?,?)' ,
                 (number, utils.U_UNCONFIRMED, username, hashP, salt, email)
             )
             db.commit()
 
             credentials = db.execute(
-                'Select user,password from credentials where name=?', (utils.EMAIL_APP,)
+                'SELECT user,password FROM credentials WHERE name=?', (utils.EMAIL_APP,)
             ).fetchone()
 
             content = 'Hello there, to activate your account, please click on this link ' + flask.url_for('auth.activate', _external=True) + '?auth=' + number
@@ -153,17 +153,17 @@ def confirm():
 
             db = get_db()
             attempt = db.execute(
-                QUERY, (authid, utils.F_ACTIVE)
+                'SELECT * FROM forgotlink where challenge=? and state=? and CURRENT_TIMESTAMP BETWEEN created AND validuntil', (authid, utils.F_ACTIVE)
             ).fetchone()
             
             if attempt is not None:
                 db.execute(
-                    QUERY, (utils.F_INACTIVE, attempt['id'])
+                    'UPDATE forgotlink SET state = ? WHERE id = ?', (utils.F_INACTIVE, attempt['id'])
                 )
                 salt = hex(random.getrandbits(128))[2:]
                 hashP = generate_password_hash(password + salt)   
                 db.execute(
-                    QUERY, (hashP, salt, attempt['userid'])
+                    'UPDATE user SET password = ?, salt=? WHERE id = ?', (hashP, salt, attempt['userid'])
                 )
                 db.commit()
                 return redirect(url_for('auth.login'))
@@ -171,7 +171,7 @@ def confirm():
                 flash('Invalid')
                 return render_template('auth/forgot.html')
 
-        return render_template(TEMP)
+        return render_template('auth/forgot.html')
     except:
         return render_template('auth/forgot.html')
 
@@ -182,12 +182,12 @@ def change():
         if g.user:
             return redirect(url_for('inbox.show'))
         
-        if request.method == 'POST': 
+        if request.method == 'GET': 
             number = request.args['auth'] 
             
             db = get_db()
             attempt = db.execute(
-                QUERY, (number, utils.F_ACTIVE)
+                'SELECT * FROM forgotlink where challenge=? and state=? and CURRENT_TIMESTAMP BETWEEN created AND validuntil', (number, utils.F_ACTIVE)
             ).fetchone()
             
             if attempt is not None:
@@ -195,7 +195,7 @@ def change():
         
         return render_template('auth/forgot.html')
     except:
-        return render_template(TEMP)
+        return render_template('auth/forgot.html')
 
 
 @bp.route('/forgot', methods=('GET', 'POST'))
@@ -214,18 +214,18 @@ def forgot():
 
             db = get_db()
             user = db.execute(
-                QUERY, (email,)
+                'SELECT * FROM user WHERE email = ?', (email,)
             ).fetchone()
 
             if user is not None:
                 number = hex(random.getrandbits(512))[2:]
                 
                 db.execute(
-                    QUERY,
+                    'UPDATE forgotlink SET state = ? WHERE userid = ?',
                     (utils.F_INACTIVE, user['id'])
                 )
                 db.execute(
-                    QUERY,
+                    'INSERT INTO forgotlink (userid, challenge,state) VALUES (?,?,?)',
                     (user['id'], number, utils.F_ACTIVE)
                 )
                 db.commit()
@@ -245,16 +245,16 @@ def forgot():
 
         return render_template('auth/forgot.html')
     except:
-        return render_template(TEMP)
+        return render_template('auth/forgot.html')
 
 
-@bp.route('/login', methods=['POST'])
+@bp.route('/login', methods=['GET','POST'])
 def login():
     try:
         if g.user:
             return redirect(url_for('inbox.show'))
 
-        if request.method == 'GET':
+        if request.method == 'POST':
             username = request.form['username']
             password = request.form['password']
 
@@ -266,7 +266,7 @@ def login():
             if not password:
                 error = 'Password Field Required'
                 flash(error)
-                return render_template(TEMP)
+                return render_template('auth/login.html')
 
             db = get_db()
             error = None
@@ -274,38 +274,38 @@ def login():
                 'SELECT * FROM user WHERE username = ?', (username,)
             ).fetchone()
             
-            if ?:
+            if user is None:
                 error = 'Incorrect username or password'
             elif not check_password_hash(user['password'], password + user['salt']):
                 error = 'Incorrect username or password'   
 
             if error is None:
                 session.clear()
-                session['user_id'] = user[?]
+                session['user_id'] = user['id']
                 return redirect(url_for('inbox.show'))
 
             flash(error)
 
-        return render_template(TEMP)
+        return render_template('auth/login.html')
     except:
         return render_template('auth/login.html')
         
 
 @bp.before_app_request
 def load_logged_in_user():
-    user_id = session.get(?)
+    user_id = session.get('user_id')
 
     if user_id is None:
         g.user = None
     else:
         g.user = get_db().execute(
-            QUERY, (user_id,)
+            'SELECT * FROM user WHERE id = ?', (user_id,)
         ).fetchone()
 
         
 @bp.route('/logout')
 def logout():
-    session.?
+    session.clear()
     return redirect(url_for('auth.login'))
 
 
