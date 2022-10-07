@@ -44,7 +44,7 @@ def activate():
         return redirect(url_for('auth.login'))
 
 
-@bp.route('/register', methods='')
+@bp.route('/register', methods=('GET','POST'))
 def register():
     try:
         if g.user:
@@ -248,7 +248,7 @@ def forgot():
         return render_template(TEMP)
 
 
-@bp.route('/login', methods=?)
+@bp.route('/login', methods=['POST'])
 def login():
     try:
         if g.user:
